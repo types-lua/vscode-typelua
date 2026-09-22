@@ -2,7 +2,7 @@
   "name": "typelua",
   "displayName": "TypeLua",
   "description": "TypeLua language support: syntax highlighting, snippets, and full IDE features (diagnostics, hover, completion, go to definition, references, rename, document symbols) powered by the tlua language server.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "typelua",
   "license": "MIT",
   "repository": {
@@ -25,7 +25,8 @@
     "vscode": "^1.90.0"
   },
   "activationEvents": [
-    "onLanguage:typelua"
+    "onLanguage:typelua",
+    "workspaceContains:**/*.tl"
   ],
   "main": "./out/extension.js",
   "contributes": {

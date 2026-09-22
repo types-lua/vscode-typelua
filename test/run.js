@@ -1,6 +1,7 @@
 'use strict';
 // Test runner: grammar tokenization + LSP contract. No VS Code instance needed.
 async function main() {
+  await require('./meta.test.js')();
   await require('./grammar.test.js')();
   await require('./lsp.test.js')();
   console.log('ALL TESTS PASSED');

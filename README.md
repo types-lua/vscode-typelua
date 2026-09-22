@@ -47,6 +47,30 @@ that opens the right setting.
   targets resolve when they are part of the same `tlua.json` project.
 - Diagnostics use the same codes as `tlua check`, so CLI and editor agree.
 
+## Troubleshooting
+
+**Nothing happens when I open a `.tl` file** — check, in order:
+
+1. The extension is installed: Extensions view → TypeLua → version shown.
+   After installing a `.vsix`, run *Developer: Reload Window*.
+2. The file's language mode (bottom-right corner) says **TypeLua**.
+   If it says something else, click it and pick TypeLua.
+3. The status bar shows a TypeLua item once a `.tl` file is open or the
+   folder contains `.tl` files.
+
+**No diagnostics / hover / go-to-definition** — the language server is not
+running:
+
+1. Open *Output → TypeLua Language Server* and look for errors.
+2. GUI-launched VS Code often has a minimal `PATH`. Either put `tlua` on
+   `PATH` for GUI apps, or set the absolute path in
+   `typelua.server.path` (e.g. `/home/user/tools/tlua`), then run
+   *TypeLua: Restart Language Server*.
+3. Verify the server itself works: `tlua lsp` must start and wait on stdin.
+
+**Go to definition needs a gesture**: `Ctrl+Click` (or `F12`) on the symbol.
+Plain click only moves the cursor.
+
 ## Release Notes
 
 See [CHANGELOG.md](CHANGELOG.md).

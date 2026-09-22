@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- Activation fallback: the extension also activates when the workspace
+  contains `*.tl` files, so the status bar and commands appear even before a
+  `.tl` file sets the language mode.
+- New manifest consistency tests (activation events, entrypoint, commands,
+  settings wiring).
+
 ## 0.1.0
 
 - Initial release.
