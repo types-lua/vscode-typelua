@@ -35,6 +35,8 @@ that opens the right setting.
 - `typelua.server.args`: server arguments (default `["lsp"]`).
 - `typelua.trace.server`: `off` | `messages` | `verbose` protocol tracing.
 - `typelua.server.maxRestarts`: auto-restart budget after crashes (default 3/min).
+- `typelua.server.startTimeout`: ms to wait for server readiness before a
+  warning popup (default 10000, 0 disables).
 
 ## Commands
 

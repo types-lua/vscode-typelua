@@ -1,5 +1,13 @@
-test/tlua-testbin
-node_modules/**
+# Ship only runtime dependencies; dev-only packages stay out.
+# (A bare `node_modules/**` would also strip the language client and break
+# activation with MODULE_NOT_FOUND, so keep the negations below in sync
+# with package.json "dependencies".)
+node_modules/*
+!node_modules/vscode-languageclient
+!node_modules/vscode-languageserver-protocol
+!node_modules/vscode-jsonrpc
+!node_modules/vscode-languageserver-types
+!node_modules/semver
 src/**
 test/**
 .vscode/**

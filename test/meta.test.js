@@ -66,6 +66,27 @@ async function main() {
     ok(src.includes(leaf), `setting consumed: ${key}`);
   }
 
+  // .vscodeignore must not blanket-exclude node_modules while the extension
+  // has runtime dependencies (that breaks activation with MODULE_NOT_FOUND).
+  const runtimeDeps = Object.keys(pkg.dependencies || {});
+  if (runtimeDeps.length > 0) {
+    const ignore = fs.readFileSync(path.join(ROOT, '.vscodeignore'), 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'));
+    ok(!ignore.includes('node_modules/**'), 'no blanket node_modules exclusion');
+    for (const dep of runtimeDeps) {
+      ok(
+        ignore.includes(`!node_modules/${dep}`),
+        `runtime dep allow-listed for packaging: ${dep}`,
+      );
+      ok(
+        fs.existsSync(path.join(ROOT, 'node_modules', dep, 'package.json')),
+        `runtime dep installed: ${dep}`,
+      );
+    }
+  }
+
   console.log(`  PASS (${passed} assertions)`);
 }
 

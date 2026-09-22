@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.3
+
+- Friendly bottom-right notifications whenever the language server has no
+  effect: missing/unusable executable, spawn failure, startup watchdog
+  (`typelua.server.startTimeout`, default 10s), repeated crashes, and
+  unexpected disconnects — each with Show Output / Open Settings /
+  Retry-or-Restart actions and log lines in the output channel.
+- Close notifications are throttled (30s) and stale start attempts can no
+  longer popup or touch the status bar.
+
+## 0.1.2
+
+- Fix: the language client runtime (`vscode-languageclient`) was stripped
+  from the package by an over-broad `.vscodeignore`, so activation failed
+  and every command errored. Runtime dependencies are now allow-listed.
+- Fix: command titles no longer duplicate the category prefix.
+- Restart command now reports failures explicitly instead of rejecting.
+
 ## 0.1.1
 
 - Activation fallback: the extension also activates when the workspace

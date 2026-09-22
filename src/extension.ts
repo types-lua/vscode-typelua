@@ -25,6 +25,20 @@ let outputChannel: vscode.OutputChannel;
 let crashTimestamps: number[] = [];
 let userStopping = false;
 
+// Notification / watchdog state. attemptId generations guard every async
+// callback so a stale start attempt can never popup or touch status.
+let attemptId = 0;
+let startTimer: ReturnType<typeof setTimeout> | undefined;
+let attemptDisposables: vscode.Disposable[] = [];
+let shutdownNotified = false;
+let lastClosePopupAt = 0;
+const CLOSE_POPUP_MIN_INTERVAL_MS = 30_000;
+
+const BTN_SHOW_OUTPUT = 'Show Output';
+const BTN_OPEN_SETTINGS = 'Open Settings';
+const BTN_RETRY = 'Retry';
+const BTN_RESTART = 'Restart Server';
+
 interface ServerResolution {
   command: string;
   source: 'settings' | 'bundled' | 'path';
@@ -111,6 +125,67 @@ function traceSetting(): Trace {
   }
 }
 
+function startTimeoutMs(): number {
+  const cfg = vscode.workspace.getConfiguration('typelua');
+  const n = cfg.get<number>('server.startTimeout');
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) {
+    return 0; // 0 or invalid disables the watchdog
+  }
+  return Math.min(Math.max(Math.floor(n), 1000), 60000);
+}
+
+/** Human-readable reason why path cannot be used as the server, or null. */
+function describeExecutableProblem(p: string): string | null {
+  let st: fs.Stats;
+  try {
+    st = fs.statSync(p);
+  } catch {
+    return `not found: ${p}`;
+  }
+  if (!st.isFile()) {
+    return `not an executable file (it is a directory or special file): ${p}`;
+  }
+  try {
+    fs.accessSync(p, fs.constants.X_OK);
+  } catch {
+    return `not executable (missing execute permission): ${p}`;
+  }
+  return null;
+}
+
+function clearStartTimer(): void {
+  if (startTimer !== undefined) {
+    clearTimeout(startTimer);
+    startTimer = undefined;
+  }
+}
+
+function disposeAttempt(): void {
+  clearStartTimer();
+  for (const d of attemptDisposables) {
+    try {
+      d.dispose();
+    } catch {
+      // best-effort
+    }
+  }
+  attemptDisposables = [];
+}
+
+async function openServerSettings(): Promise<void> {
+  await vscode.commands.executeCommand(
+    'workbench.action.openSettings',
+    'typelua.server.path',
+  );
+}
+
+async function restartFlow(context: vscode.ExtensionContext): Promise<void> {
+  // Manual retry: a fresh attempt may notify again.
+  lastClosePopupAt = 0;
+  await stopClient();
+  await startClient(context);
+}
+
 function setStatus(text: string, tooltip: string, error: boolean): void {
   statusItem.text = text;
   statusItem.tooltip = tooltip;
@@ -119,75 +194,171 @@ function setStatus(text: string, tooltip: string, error: boolean): void {
     : undefined;
 }
 
-class TlErrorHandler implements ErrorHandler {
-  error(
-    _error: Error,
-    _message: Parameters<ErrorHandler['error']>[1],
-    count: number | undefined,
-  ): { action: ErrorAction } {
-    const now = Date.now();
-    crashTimestamps.push(now);
-    crashTimestamps = crashTimestamps.filter((t) => now - t < 60_000);
-    if (crashTimestamps.length > maxRestarts()) {
-      void vscode.window.showErrorMessage(
-        `TypeLua language server crashed ${crashTimestamps.length} times in the last minute. Automatic restarts are disabled; use "TypeLua: Restart Language Server" to retry.`,
+function makeErrorHandler(context: vscode.ExtensionContext): ErrorHandler {
+  return {
+    error(
+      _error: Error,
+      _message: Parameters<ErrorHandler['error']>[1],
+      count: number | undefined,
+    ): { action: ErrorAction } {
+      const now = Date.now();
+      crashTimestamps.push(now);
+      crashTimestamps = crashTimestamps.filter((t) => now - t < 60_000);
+      if (crashTimestamps.length > maxRestarts()) {
+        if (shutdownNotified) {
+          return { action: ErrorAction.Shutdown }; // already told the user
+        }
+        shutdownNotified = true;
+        setStatus('$(error) TypeLua', 'Language server stopped after repeated crashes', true);
+        outputChannel.appendLine(
+          `language server crashed ${crashTimestamps.length} times in the last minute; automatic restarts disabled`,
+        );
+        void (async () => {
+          const choice = await vscode.window.showErrorMessage(
+            `TypeLua language server keeps crashing ` +
+              `(${crashTimestamps.length} times in the last minute), so automatic restarts are paused. ` +
+              `Diagnostics, completion and go-to-definition are unavailable.`,
+            BTN_SHOW_OUTPUT,
+            BTN_RESTART,
+          );
+          if (choice === BTN_SHOW_OUTPUT) {
+            outputChannel.show(true);
+          } else if (choice === BTN_RESTART) {
+            await restartFlow(context);
+          }
+        })();
+        return { action: ErrorAction.Shutdown };
+      }
+      setStatus(
+        '$(sync~spin) TypeLua',
+        `Language server crashed${count !== undefined ? ` (${count})` : ''}, restarting…`,
+        false,
       );
-      setStatus('$(error) TypeLua', 'Language server stopped after repeated crashes', true);
-      return { action: ErrorAction.Shutdown };
-    }
-    setStatus(
-      '$(sync~spin) TypeLua',
-      `Language server crashed${count !== undefined ? ` (${count})` : ''}, restarting…`,
-      false,
-    );
-    return { action: ErrorAction.Continue };
-  }
+      return { action: ErrorAction.Continue };
+    },
 
-  closed(): { action: CloseAction } {
-    if (!userStopping) {
+    closed(): { action: CloseAction } {
+      if (userStopping) {
+        return { action: CloseAction.DoNotRestart };
+      }
       setStatus('$(circle-slash) TypeLua', 'Language server connection closed', true);
-    }
-    return { action: CloseAction.DoNotRestart };
+      if (shutdownNotified) {
+        return { action: CloseAction.DoNotRestart };
+      }
+      // Throttle: a flapping server must not spam the notification area.
+      const now = Date.now();
+      if (now - lastClosePopupAt < CLOSE_POPUP_MIN_INTERVAL_MS) {
+        return { action: CloseAction.DoNotRestart };
+      }
+      lastClosePopupAt = now;
+      outputChannel.appendLine('language server connection closed unexpectedly');
+      void (async () => {
+        const choice = await vscode.window.showWarningMessage(
+          'TypeLua language server connection closed unexpectedly. ' +
+            'Diagnostics, completion and go-to-definition are unavailable.',
+          BTN_RESTART,
+          BTN_SHOW_OUTPUT,
+        );
+        if (choice === BTN_RESTART) {
+          await restartFlow(context);
+        } else if (choice === BTN_SHOW_OUTPUT) {
+          outputChannel.show(true);
+        }
+      })();
+      return { action: CloseAction.DoNotRestart };
+    },
+  };
+}
+
+/** Watchdog: the server process started but never reached Running. */
+async function onStartTimeout(
+  context: vscode.ExtensionContext,
+  attempt: number,
+  commandLine: string,
+): Promise<void> {
+  if (attempt !== attemptId || !client || client.state === State.Running) {
+    return;
+  }
+  const secs = Math.round((startTimeoutMs() || 10000) / 1000);
+  setStatus(
+    '$(error) TypeLua',
+    `Language server did not respond within ${secs}s (${commandLine})`,
+    true,
+  );
+  outputChannel.appendLine(
+    `language server did not reach running state within ${secs}s (command: ${commandLine}); ` +
+      `it may be the wrong binary, missing "lsp" support, or blocked on startup`,
+  );
+  const choice = await vscode.window.showErrorMessage(
+    `TypeLua language server did not respond within ${secs}s (started "${commandLine}"). ` +
+      `Diagnostics, completion and go-to-definition are unavailable.`,
+    BTN_SHOW_OUTPUT,
+    BTN_OPEN_SETTINGS,
+    BTN_RETRY,
+  );
+  if (attempt !== attemptId) {
+    return; // a newer attempt superseded this popup
+  }
+  if (choice === BTN_SHOW_OUTPUT) {
+    outputChannel.show(true);
+  } else if (choice === BTN_OPEN_SETTINGS) {
+    await openServerSettings();
+  } else if (choice === BTN_RETRY) {
+    await restartFlow(context);
   }
 }
 
 async function startClient(context: vscode.ExtensionContext): Promise<void> {
   userStopping = false;
+  shutdownNotified = false;
+  const attempt = ++attemptId;
+  disposeAttempt();
   const resolved = resolveServer(context);
   const args = serverArgs();
+  const commandLine = `${resolved.command} ${args.join(' ')}`.trim();
 
   if (resolved.source === 'settings') {
-    try {
-      fs.accessSync(resolved.command, fs.constants.X_OK);
-    } catch {
-      setStatus('$(error) TypeLua', `Server not executable: ${resolved.command}`, true);
-      const open = 'Open Settings';
+    const problem = describeExecutableProblem(resolved.command);
+    if (problem !== null) {
+      setStatus('$(error) TypeLua', `Server unusable: ${problem}`, true);
+      outputChannel.appendLine(`language server unusable: ${problem}`);
       const choice = await vscode.window.showErrorMessage(
-        `TypeLua: language server not found or not executable: ${resolved.command}. ` +
-          `Install tlua, or fix the "typelua.server.path" setting.`,
-        open,
+        `TypeLua language server is unusable (${problem}). ` +
+          `Install tlua or fix the "typelua.server.path" setting. ` +
+          `Diagnostics, completion and go-to-definition are unavailable.`,
+        BTN_OPEN_SETTINGS,
+        BTN_SHOW_OUTPUT,
+        BTN_RETRY,
       );
-      if (choice === open) {
-        await vscode.commands.executeCommand(
-          'workbench.action.openSettings',
-          'typelua.server.path',
-        );
+      if (choice === BTN_OPEN_SETTINGS) {
+        await openServerSettings();
+      } else if (choice === BTN_SHOW_OUTPUT) {
+        outputChannel.show(true);
+      } else if (choice === BTN_RETRY) {
+        await restartFlow(context);
       }
       return;
     }
   } else if (resolved.source === 'path' && !onPath(resolved.command)) {
     setStatus('$(error) TypeLua', 'tlua not found on PATH', true);
-    const open = 'Open Settings';
-    const choice = await vscode.window.showErrorMessage(
-      'TypeLua: could not find the language server. Install tlua and make sure ' +
-        'it is on PATH, or set "typelua.server.path" to its location.',
-      open,
+    outputChannel.appendLine(
+      'language server not found: no "tlua" on PATH and no bundled server; ' +
+        'set "typelua.server.path" to continue',
     );
-    if (choice === open) {
-      await vscode.commands.executeCommand(
-        'workbench.action.openSettings',
-        'typelua.server.path',
-      );
+    const choice = await vscode.window.showErrorMessage(
+      'TypeLua: could not find the language server (no "tlua" on PATH). ' +
+        'Install tlua, or set "typelua.server.path" to its location. ' +
+        'Diagnostics, completion and go-to-definition are unavailable.',
+      BTN_OPEN_SETTINGS,
+      BTN_SHOW_OUTPUT,
+      BTN_RETRY,
+    );
+    if (choice === BTN_OPEN_SETTINGS) {
+      await openServerSettings();
+    } else if (choice === BTN_SHOW_OUTPUT) {
+      outputChannel.show(true);
+    } else if (choice === BTN_RETRY) {
+      await restartFlow(context);
     }
     return;
   }
@@ -206,7 +377,7 @@ async function startClient(context: vscode.ExtensionContext): Promise<void> {
     outputChannelName: OUTPUT_NAME,
     revealOutputChannelOn: RevealOutputChannelOn.Never,
     traceOutputChannel: outputChannel,
-    errorHandler: new TlErrorHandler(),
+    errorHandler: makeErrorHandler(context),
   };
 
   client = new LanguageClient(
@@ -218,17 +389,27 @@ async function startClient(context: vscode.ExtensionContext): Promise<void> {
   client.registerProposedFeatures?.();
   setStatus('$(sync~spin) TypeLua', 'Starting language server…', false);
 
-  client.onDidChangeState((e) => {
-    if (e.newState === State.Running) {
-      setStatus(
-        '$(check) TypeLua',
-        `Language server running (${resolved.command} ${args.join(' ')})`,
-        false,
-      );
-    } else if (e.newState === State.Stopped && !userStopping) {
-      // Unexpected stop is already surfaced by the error handler / closed().
-    }
-  });
+  attemptDisposables.push(
+    client.onDidChangeState((e) => {
+      if (attempt !== attemptId) {
+        return; // stale attempt
+      }
+      if (e.newState === State.Running) {
+        clearStartTimer();
+        setStatus('$(check) TypeLua', `Language server running (${commandLine})`, false);
+      }
+    }),
+  );
+
+  // Watchdog: the process may exist yet never answer (wrong binary,
+  // missing "lsp" support, blocked startup). Never kill it here — a slow
+  // first start is legitimate; just tell the user loudly.
+  const timeoutMs = startTimeoutMs();
+  if (timeoutMs > 0) {
+    startTimer = setTimeout(() => {
+      void onStartTimeout(context, attempt, commandLine);
+    }, timeoutMs);
+  }
 
   // NOTE: the client is intentionally NOT added to context.subscriptions:
   // its lifecycle is managed across restarts by stopClient()/startClient().
@@ -236,16 +417,34 @@ async function startClient(context: vscode.ExtensionContext): Promise<void> {
     await client.start();
     await client.setTrace(traceSetting());
   } catch (err) {
+    if (attempt !== attemptId) {
+      return;
+    }
+    clearStartTimer();
     const msg = err instanceof Error ? err.message : String(err);
     setStatus('$(error) TypeLua', `Failed to start language server: ${msg}`, true);
-    void vscode.window.showErrorMessage(
-      `TypeLua: failed to start language server (${resolved.command}): ${msg}`,
+    outputChannel.appendLine(`failed to start language server (${commandLine}): ${msg}`);
+    const choice = await vscode.window.showErrorMessage(
+      `TypeLua: failed to start language server ("${commandLine}"): ${msg}. ` +
+        `Diagnostics, completion and go-to-definition are unavailable.`,
+      BTN_SHOW_OUTPUT,
+      BTN_OPEN_SETTINGS,
+      BTN_RETRY,
     );
+    if (choice === BTN_SHOW_OUTPUT) {
+      outputChannel.show(true);
+    } else if (choice === BTN_OPEN_SETTINGS) {
+      await openServerSettings();
+    } else if (choice === BTN_RETRY) {
+      await restartFlow(context);
+    }
   }
 }
 
 async function stopClient(): Promise<void> {
   userStopping = true;
+  attemptId++; // invalidate pending watchdogs/popups
+  disposeAttempt();
   if (client) {
     const c = client;
     client = undefined;
@@ -274,8 +473,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(
     vscode.commands.registerCommand('typelua.restartServer', async () => {
-      await stopClient();
-      await startClient(context);
+      try {
+        await restartFlow(context);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setStatus('$(error) TypeLua', `Restart failed: ${msg}`, true);
+        outputChannel.appendLine(`restart failed: ${msg}`);
+        void vscode.window.showErrorMessage(`TypeLua: restart failed: ${msg}`);
+      }
     }),
     vscode.commands.registerCommand('typelua.showOutput', () => {
       outputChannel.show(true);

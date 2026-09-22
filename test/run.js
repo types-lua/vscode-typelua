@@ -4,6 +4,7 @@ async function main() {
   await require('./meta.test.js')();
   await require('./grammar.test.js')();
   await require('./lsp.test.js')();
+  await require('./client.test.js')();
   console.log('ALL TESTS PASSED');
 }
 

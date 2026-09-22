@@ -2,7 +2,7 @@
   "name": "typelua",
   "displayName": "TypeLua",
   "description": "TypeLua language support: syntax highlighting, snippets, and full IDE features (diagnostics, hover, completion, go to definition, references, rename, document symbols) powered by the tlua language server.",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "publisher": "typelua",
   "license": "MIT",
   "repository": {
@@ -75,18 +75,23 @@
           "type": "number",
           "default": 3,
           "description": "How many times the server is auto-restarted after a crash before giving up (within one minute)."
+        },
+        "typelua.server.startTimeout": {
+          "type": "number",
+          "default": 10000,
+          "description": "Milliseconds to wait for the server to become ready before showing a warning notification (0 disables the watchdog)."
         }
       }
     },
     "commands": [
       {
         "command": "typelua.restartServer",
-        "title": "TypeLua: Restart Language Server",
+        "title": "Restart Language Server",
         "category": "TypeLua"
       },
       {
         "command": "typelua.showOutput",
-        "title": "TypeLua: Show Language Server Output",
+        "title": "Show Language Server Output",
         "category": "TypeLua"
       }
     ]
