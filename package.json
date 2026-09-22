@@ -1,0 +1,111 @@
+{
+  "name": "typelua",
+  "displayName": "TypeLua",
+  "description": "TypeLua language support: syntax highlighting, snippets, and full IDE features (diagnostics, hover, completion, go to definition, references, rename, document symbols) powered by the tlua language server.",
+  "version": "0.1.0",
+  "publisher": "typelua",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/typelua/typelua"
+  },
+  "homepage": "https://github.com/typelua/typelua",
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Snippets"
+  ],
+  "keywords": [
+    "lua",
+    "typelua",
+    "types",
+    "lsp"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onLanguage:typelua"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "typelua",
+        "aliases": ["TypeLua", "typelua"],
+        "extensions": [".tl"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "typelua",
+        "scopeName": "source.tlua",
+        "path": "./syntaxes/typelua.tmGrammar.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "typelua",
+        "path": "./snippets/typelua.json"
+      }
+    ],
+    "configuration": {
+      "title": "TypeLua",
+      "properties": {
+        "typelua.server.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the tlua language server executable. Empty means: bundled server for this platform if present, otherwise \"tlua\" from PATH."
+        },
+        "typelua.server.args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["lsp"],
+          "description": "Arguments passed to the language server executable."
+        },
+        "typelua.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the TypeLua language server."
+        },
+        "typelua.server.maxRestarts": {
+          "type": "number",
+          "default": 3,
+          "description": "How many times the server is auto-restarted after a crash before giving up (within one minute)."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "typelua.restartServer",
+        "title": "TypeLua: Restart Language Server",
+        "category": "TypeLua"
+      },
+      {
+        "command": "typelua.showOutput",
+        "title": "TypeLua: Show Language Server Output",
+        "category": "TypeLua"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node ./test/run.js",
+    "package": "vsce package",
+    "lint": "tsc --noEmit -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^2.26.0",
+    "typescript": "^5.5.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.1.0"
+  }
+}

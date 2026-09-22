@@ -1,0 +1,7 @@
+test/tlua-testbin
+node_modules/**
+src/**
+test/**
+.vscode/**
+.gitignore
+tsconfig.json
