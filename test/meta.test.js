@@ -42,8 +42,9 @@ async function main() {
   ok(editorCommands.includes('typelua.runFile'), 'context menu runs files');
   ok(editorCommands.includes('typelua.debugFile'), 'context menu debugs files');
 
-  const mainRel = (pkg.main || '').replace(/^\.\//, '');
-  ok(mainRel.length > 0 && fs.existsSync(path.join(ROOT, mainRel)), `entrypoint exists: ${mainRel}`);
+  // The shipped entrypoint is the esbuild bundle, produced by `npm run
+  // bundle`; it is intentionally absent from a fresh checkout and from git.
+  ok(pkg.main === './dist/extension.js', 'main points at the esbuild bundle');
 
   const lang = pkg.contributes.languages[0];
   ok(lang.id === 'typelua', 'language id is typelua');
@@ -80,26 +81,32 @@ async function main() {
     ok(src.includes(leaf), `setting consumed: ${key}`);
   }
 
-  // .vscodeignore must not blanket-exclude node_modules while the extension
-  // has runtime dependencies (that breaks activation with MODULE_NOT_FOUND).
+  // The bundle is self-contained, so runtime dependencies must stay empty and
+  // node_modules must be excluded; the packaging script additionally verifies
+  // the archive. These checks catch the historical activation failure
+  // (MODULE_NOT_FOUND) at `npm test` time instead of after publishing.
   const runtimeDeps = Object.keys(pkg.dependencies || {});
-  if (runtimeDeps.length > 0) {
-    const ignore = fs.readFileSync(path.join(ROOT, '.vscodeignore'), 'utf8')
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith('#'));
-    ok(!ignore.includes('node_modules/**'), 'no blanket node_modules exclusion');
-    for (const dep of runtimeDeps) {
-      ok(
-        ignore.includes(`!node_modules/${dep}`),
-        `runtime dep allow-listed for packaging: ${dep}`,
-      );
-      ok(
-        fs.existsSync(path.join(ROOT, 'node_modules', dep, 'package.json')),
-        `runtime dep installed: ${dep}`,
-      );
-    }
-  }
+  ok(runtimeDeps.length === 0, 'no runtime dependencies (bundle is self-contained)');
+  ok(Boolean(pkg.scripts?.bundle), 'has a bundle script');
+  ok(Boolean(pkg.devDependencies?.esbuild), 'esbuild is a dev dependency');
+  ok(
+    Boolean(pkg.devDependencies?.['vscode-languageclient']),
+    'vscode-languageclient is bundled from devDependencies',
+  );
+
+  const ignore = fs.readFileSync(path.join(ROOT, '.vscodeignore'), 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+  ok(ignore.includes('node_modules/**'), 'packaging excludes node_modules');
+  ok(!ignore.some((l) => l.replace(/\/$/, '') === 'dist'), 'packaging keeps dist/');
+
+  const buildScript = fs.readFileSync(path.join(ROOT, 'scripts', 'build.mjs'), 'utf8');
+  ok(buildScript.includes("external: ['vscode']"), 'vscode stays external in the bundle');
+
+  const packScript = fs.readFileSync(path.join(ROOT, 'scripts', 'package.mjs'), 'utf8');
+  ok(packScript.includes('extension/dist/extension.js'), 'packaging verifies the bundle member');
+  ok(packScript.includes('extension/node_modules/'), 'packaging verifies node_modules is absent');
 
   console.log(`  PASS (${passed} assertions)`);
 }

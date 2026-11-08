@@ -1,15 +1,14 @@
-# Ship only runtime dependencies; dev-only packages stay out.
-# (A bare `node_modules/**` would also strip the language client and break
-# activation with MODULE_NOT_FOUND, so keep the negations below in sync
-# with package.json "dependencies".)
-node_modules/*
-!node_modules/vscode-languageclient
-!node_modules/vscode-languageserver-protocol
-!node_modules/vscode-jsonrpc
-!node_modules/vscode-languageserver-types
-!node_modules/semver
+# dist/extension.js is a self-contained bundle (esbuild), so node_modules and
+# the tsc build are not shipped. Shipping them was the source of past
+# activation failures.
+node_modules/**
+out/**
 src/**
 test/**
+scripts/**
+.github/**
 .vscode/**
 .gitignore
 tsconfig.json
+*.vsix
+.typelua/**

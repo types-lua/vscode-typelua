@@ -2,6 +2,18 @@
 
 ## 0.2.0
 
+- Build: the extension (including `vscode-languageclient`) is bundled by
+  esbuild into `dist/extension.js`; the VSIX no longer ships or needs
+  `node_modules`. This removes the activation failure where the packaged
+  extension could not resolve its language-client dependency.
+- Packaging is verified: `npm run package` asserts the bundle exists and is
+  large enough, the archive contains the bundle and no `node_modules`, every
+  `require()` is a Node builtin or `vscode`, and the archived bundle loads
+  with a stub host.
+- CI (`.github/workflows/ci.yml`) runs tests and packaging on push/PR and
+  uploads the VSIX. Releases (`.github/workflows/release.yml`) run on `vX.Y.Z`
+  tags, enforce tag/`package.json` equality, and attach the VSIX plus
+  `SHA256SUMS.txt` to the GitHub Release.
 - Test Explorer: discovers `tests/**` and `*_test.tl` cases through
   `tlua test --list`, with Run and Debug profiles, per-case results parsed
   from `--format=json`, and refresh on file changes.

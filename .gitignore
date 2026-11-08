@@ -2,3 +2,5 @@ node_modules/
 out/
 test/tlua-testbin
 *.vsix
+dist/
+.typelua/

@@ -19,6 +19,24 @@ with run/debug, and breakpoint debugging through `tlua dap`.
 | Test Explorer | Discovers `tests/**` and `*_test.tl` cases; run or debug one case, a file, or the whole workspace from the Testing view |
 | Debugging | Breakpoints, step in/over/out, call stack, locals, program output, test-result reporting; launch with `F5` on any `.tl` file |
 
+## Install
+
+Download `typelua-X.Y.Z.vsix` from
+[Releases](https://github.com/types-lua/vscode-typelua/releases) and install it:
+
+- VS Code: **Extensions** → `⋯` → **Install from VSIX…**
+- CLI: `code --install-extension typelua-X.Y.Z.vsix`
+
+Each release also ships `SHA256SUMS.txt`:
+
+```bash
+sha256sum -c SHA256SUMS.txt
+```
+
+The VSIX is self-contained: the extension and `vscode-languageclient` are
+bundled into `dist/extension.js`, so no `node_modules` is installed or needed
+at runtime.
+
 ## Debugging
 
 Press `F5` on a `.tl` file (or run **TypeLua: Debug File**) to start a session.
@@ -77,6 +95,10 @@ Build it from the TypeLua repo with `go build -o tlua ./cmd/tlua` and put
 it on `PATH`. If no server is found you get an error message with a button
 that opens the right setting.
 
+The debugger and Test Explorer additionally need an external Lua interpreter
+(`lua5.4`, or `luajit` for `--target 5.1`); set `typelua.lua.path` if it is
+not auto-detected.
+
 ## Extension Settings
 
 - `typelua.server.path`: server executable path (empty = bundled, else PATH).
@@ -90,10 +112,30 @@ that opens the right setting.
 - `typelua.debug.check`: type-check before a debug session (default false).
 - `typelua.test.args`: extra `tlua test` arguments (e.g. `["--lua","lua5.4"]`).
 
-## Commands
+## Server Commands
 
 - `TypeLua: Restart Language Server`
 - `TypeLua: Show Language Server Output`
+
+## Building and releasing
+
+```bash
+npm ci
+npm run compile   # tsc -> out/ (tests only)
+npm test          # manifest, grammar, LSP and client tests
+npm run package   # esbuild -> dist/, then verified VSIX
+```
+
+`npm run package` refuses to publish an archive that is missing the bundle,
+still contains `node_modules`, or whose bundle requires anything other than
+Node builtins/`vscode` (the historical activation failure). It also loads the
+archived bundle with a stub `vscode` host to catch broken imports.
+
+CI (`.github/workflows/ci.yml`) runs the tests and packaging on every push and
+pull request, and uploads the VSIX as an artifact. Releases
+(`.github/workflows/release.yml`) run on `vX.Y.Z` tags, require the tag to
+match `package.json`, and attach `typelua-X.Y.Z.vsix` plus `SHA256SUMS.txt` to
+the GitHub Release.
 
 ## Notes
 

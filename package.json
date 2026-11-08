@@ -34,7 +34,7 @@
     "onStartupFinished",
     "onDebugResolve:typelua"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "languages": [
       {
@@ -331,18 +331,21 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "node ./test/run.js",
-    "package": "vsce package",
-    "lint": "tsc --noEmit -p ./"
+    "package": "npm run compile && npm run bundle && node scripts/package.mjs",
+    "lint": "tsc --noEmit -p ./",
+    "package:ci": "npm run bundle && node scripts/package.mjs",
+    "bundle": "node scripts/build.mjs",
+    "pretest": "npm run compile"
   },
-  "dependencies": {
-    "vscode-languageclient": "^9.0.1"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^2.26.0",
+    "esbuild": "^0.25.12",
     "typescript": "^5.5.0",
     "vscode-oniguruma": "^2.0.1",
-    "vscode-textmate": "^9.1.0"
+    "vscode-textmate": "^9.1.0",
+    "vscode-languageclient": "^9.0.1"
   }
 }

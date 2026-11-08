@@ -1,0 +1,132 @@
+# Build and publish the VSIX on a vX.Y.Z tag.
+#
+# The tag must match package.json's version exactly; publishing a mismatched
+# artifact is worse than failing the job. The release is idempotent so a
+# re-run repairs assets instead of erroring.
+name: Release VSIX
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout extension
+        uses: actions/checkout@v4
+
+      - name: Checkout TypeLua (server + examples)
+        uses: actions/checkout@v4
+        with:
+          repository: types-lua/TypeLua
+          path: .typelua/TypeLua
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .typelua/TypeLua/go.mod
+          cache: true
+          cache-dependency-path: .typelua/TypeLua/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check tag matches package.json
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="${GITHUB_REF_NAME}"
+          if [ "$tag" != "v$version" ]; then
+            echo "::error title=Version mismatch::tag $tag does not match package.json version $version (expected v$version)"
+            exit 1
+          fi
+          echo "releasing $tag (package.json $version)"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile (tsc)
+        run: npm run compile
+
+      - name: Test (manifest, grammar, LSP, client)
+        env:
+          TYPELUA_REPO: ${{ github.workspace }}/.typelua/TypeLua
+          TYPELUA_EXAMPLES: ${{ github.workspace }}/.typelua/TypeLua/examples
+        run: npm test
+
+      # `package` compiles, bundles and then verifies the archive (bundle
+      # present, no node_modules, all requires resolvable to builtins).
+      - name: Package VSIX (verified archive)
+        run: npm run package:ci
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: typelua-vsix
+          path: "*.vsix"
+          if-no-files-found: error
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download VSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: typelua-vsix
+          path: release-assets
+
+      - name: Verify archive integrity and checksums
+        run: |
+          set -euo pipefail
+          cd release-assets
+          ls -l
+          # A corrupt upload/download must not be published.
+          for f in ./*.vsix; do
+            test -s "$f"
+            unzip -t "$f" >/dev/null
+          done
+          sha256sum ./*.vsix > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create or update GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The release job has no checkout, so gh cannot infer the repository
+          # from a git remote; pin it explicitly (same fix as TypeLua v0.9.0).
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          ASSETS=(
+            "release-assets/typelua-${VERSION}.vsix"
+            "release-assets/SHA256SUMS.txt"
+          )
+          for f in "${ASSETS[@]}"; do
+            test -s "$f" || { echo "missing asset: $f" >&2; exit 1; }
+          done
+          # Idempotent: a re-run (or a release created by hand) must not fail
+          # the job. --clobber keeps the published files in sync with the tag.
+          if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "release $TAG exists; uploading assets with --clobber"
+            gh release upload "$TAG" "${ASSETS[@]}" --repo "$GH_REPO" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --repo "$GH_REPO" \
+              --verify-tag \
+              --title "$TAG" \
+              --generate-notes
+          fi

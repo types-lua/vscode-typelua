@@ -1,0 +1,70 @@
+# Verify the extension and build a checked VSIX.
+#
+# The TypeLua compiler is checked out next to the extension because the LSP
+# contract tests build a real `tlua lsp` server and the grammar tests tokenize
+# the examples corpus.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout extension
+        uses: actions/checkout@v4
+
+      - name: Checkout TypeLua (server + examples)
+        uses: actions/checkout@v4
+        with:
+          repository: types-lua/TypeLua
+          path: .typelua/TypeLua
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .typelua/TypeLua/go.mod
+          cache: true
+          cache-dependency-path: .typelua/TypeLua/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile (tsc)
+        run: npm run compile
+
+      - name: Test (manifest, grammar, LSP, client)
+        env:
+          TYPELUA_REPO: ${{ github.workspace }}/.typelua/TypeLua
+          TYPELUA_EXAMPLES: ${{ github.workspace }}/.typelua/TypeLua/examples
+        run: npm test
+
+      - name: Bundle extension (esbuild)
+        run: npm run bundle
+
+      - name: Package VSIX (verified archive)
+        run: npm run package:ci
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: typelua-vsix
+          path: "*.vsix"
+          if-no-files-found: error
