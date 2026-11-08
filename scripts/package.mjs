@@ -78,6 +78,17 @@ const archived = execFileSync('unzip', ['-p', out, 'extension/dist/extension.js'
   encoding: 'utf8',
   maxBuffer: 16 * 1024 * 1024,
 });
+const built = readFileSync(path.join(root, 'dist', 'extension.js'), 'utf8');
+if (archived !== built) {
+  fail('archived bundle does not match dist/extension.js (stale package?)');
+}
+
+// Never publish credentials or stray local files, even if .vscodeignore drifts.
+for (const name of names) {
+  if (/(^|\/)(\.env|\.npmrc|id_rsa)(\/|$)|\/([^/]*\.(pem|key|p12))$/.test(name)) {
+    fail(`refusing to publish sensitive file: ${name}`);
+  }
+}
 
 // Every literal require() in the archive must be the host `vscode` module or a
 // Node builtin. A third-party name means something was left unbundled and the
