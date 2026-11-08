@@ -6,7 +6,8 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const GRAMMAR_PATH = path.join(ROOT, 'syntaxes', 'typelua.tmGrammar.json');
-const EXAMPLES_DIR = '/home/tang/TypeLua/examples';
+const EXAMPLES_DIR =
+  process.env.TYPELUA_EXAMPLES || path.join(ROOT, '..', 'TypeLua', 'examples');
 
 let passed = 0;
 function ok(cond, msg) {
@@ -138,6 +139,13 @@ async function testSample(grammar) {
   ok(scopesOf(t('local p: Point = { x = 1 }'), 'x').includes('variable.other.property.tlua'), 'table key');
   ok(scopesOf(t('if x ~= nil then print(x) end'), 'nil').includes('constant.language.tlua'), 'nil constant');
   ok(scopesOf(t('if x ~= nil then print(x) end'), 'print').includes('support.function.builtin.tlua'), 'builtin print');
+  ok(scopesOf(t('async function work(): void end'), 'async').includes('keyword.control.tlua'), 'async keyword');
+  ok(scopesOf(t('await jobs:send(1)'), 'await').includes('keyword.control.tlua'), 'await keyword');
+  ok(scopesOf(t('defer cleanup()'), 'defer').includes('keyword.control.tlua'), 'defer keyword');
+  ok(scopesOf(t('select { case local v = ch:recv() then print(v) }'), 'select').includes('keyword.control.tlua'), 'select keyword');
+  ok(scopesOf(t('local ch: chan<number> = makeChan<number>(1)'), 'chan').includes('storage.type.tlua'), 'chan type');
+  ok(scopesOf(t('local f: (number) -> string'), '->').includes('keyword.operator.arrow.tlua'), 'arrow operator');
+  ok(scopesOf(t('import codec from "./codec"'), 'import').includes('keyword.control.tlua'), 'import keyword');
 }
 
 function listTlFiles(dir) {
@@ -157,6 +165,10 @@ function listTlFiles(dir) {
 }
 
 async function testCorpus(grammar) {
+  if (!fs.existsSync(EXAMPLES_DIR)) {
+    console.log(`  corpus skipped (no examples at ${EXAMPLES_DIR})`);
+    return;
+  }
   const files = listTlFiles(EXAMPLES_DIR);
   ok(files.length > 10, `corpus has files (got ${files.length})`);
   let totalLines = 0;

@@ -27,6 +27,20 @@ async function main() {
     pkg.activationEvents.some((e) => e.startsWith('workspaceContains:')),
     'has workspace fallback activation',
   );
+  ok(pkg.activationEvents.includes('onStartupFinished'), 'activates for the Test Explorer');
+  ok(pkg.activationEvents.includes('onDebugResolve:typelua'), 'activates for debugging');
+
+  const debuggers = pkg.contributes.debuggers || [];
+  ok(debuggers.length === 1 && debuggers[0].type === 'typelua', 'contributes a typelua debugger');
+  const launch = debuggers[0].configurationAttributes.launch;
+  ok(Array.isArray(launch.required) && launch.required.includes('program'), 'launch requires program');
+  ok(launch.properties.stopOnEntry && launch.properties.stopOnEntry.type === 'boolean', 'stopOnEntry supported');
+  ok(Array.isArray(debuggers[0].initialConfigurations) && debuggers[0].initialConfigurations.length > 0, 'debugger has initial configuration');
+
+  const menu = pkg.contributes.menus || {};
+  const editorCommands = (menu['editor/context'] || []).map((m) => m.command);
+  ok(editorCommands.includes('typelua.runFile'), 'context menu runs files');
+  ok(editorCommands.includes('typelua.debugFile'), 'context menu debugs files');
 
   const mainRel = (pkg.main || '').replace(/^\.\//, '');
   ok(mainRel.length > 0 && fs.existsSync(path.join(ROOT, mainRel)), `entrypoint exists: ${mainRel}`);

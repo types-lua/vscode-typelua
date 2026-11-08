@@ -53,14 +53,13 @@ function bundledServerName(): string {
       : process.platform === 'darwin'
         ? 'darwin'
         : 'linux';
+  // Release assets use Go's GOARCH spelling (amd64, arm64).
   const arch =
     process.arch === 'x64'
-      ? 'x64'
+      ? 'amd64'
       : process.arch === 'arm64'
         ? 'arm64'
-        : process.arch === 'riscv64'
-          ? 'riscv64'
-          : process.arch;
+        : process.arch;
   const ext = process.platform === 'win32' ? '.exe' : '';
   return `tlua-${plat}-${arch}${ext}`;
 }
@@ -183,6 +182,12 @@ async function restartFlow(context: vscode.ExtensionContext): Promise<void> {
   // Manual retry: a fresh attempt may notify again.
   lastClosePopupAt = 0;
   await stopClient();
+  extContext = context;
+  registerCommands(context);
+  registerDebugging(context);
+  registerTestDebugTracker(context);
+  setupTesting(context);
+
   await startClient(context);
 }
 
@@ -458,6 +463,512 @@ async function stopClient(): Promise<void> {
   crashTimestamps = [];
 }
 
+
+// ---------------------------------------------------------------------------
+// Commands, tests and debugging
+// ---------------------------------------------------------------------------
+
+let extContext: vscode.ExtensionContext | undefined;
+let testController: vscode.TestController | undefined;
+let discoveryTimer: ReturnType<typeof setTimeout> | undefined;
+const testItemIndex = new Map<string, vscode.TestItem>();
+
+interface ListedCase {
+  module: string;
+  case: string;
+  file: string;
+}
+
+interface ExecResult {
+  stdout: string;
+  stderr: string;
+  code: number;
+}
+
+function tluaExecutable(): string | undefined {
+  if (!extContext) return undefined;
+  const resolved = resolveServer(extContext);
+  if (resolved.source === 'path' && !onPath(resolved.command)) {
+    void vscode.window.showErrorMessage(
+      'TypeLua: cannot find "tlua" on PATH. Set "typelua.server.path" to the compiler binary.',
+    );
+    return undefined;
+  }
+  return resolved.command;
+}
+
+function execFileP(command: string, args: string[], cwd?: string): Promise<ExecResult> {
+  return new Promise((resolvePromise) => {
+    child_process.execFile(
+      command,
+      args,
+      { cwd, maxBuffer: 64 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        let code = 0;
+        if (err) {
+          const raw = (err as NodeJS.ErrnoException & { code?: unknown }).code;
+          code = typeof raw === 'number' ? raw : 1;
+        }
+        resolvePromise({ stdout: stdout ?? '', stderr: stderr ?? '', code });
+      },
+    );
+  });
+}
+
+function runTask(name: string, args: string[], cwd?: string): void {
+  const exe = tluaExecutable();
+  if (!exe) return;
+  const folder = cwd ? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(cwd)) : undefined;
+  const task = new vscode.Task(
+    { type: 'typelua', name },
+    folder ?? vscode.TaskScope.Workspace,
+    name,
+    'typelua',
+    new vscode.ShellExecution(exe, args, { cwd }),
+  );
+  task.presentationOptions = {
+    reveal: vscode.TaskRevealKind.Always,
+    panel: vscode.TaskPanelKind.Dedicated,
+    clear: true,
+    showReuseMessage: false,
+  };
+  void vscode.tasks.executeTask(task);
+}
+
+function activeTypeluaFile(): vscode.Uri | undefined {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.languageId !== LANGUAGE_ID) return undefined;
+  return editor.document.uri;
+}
+
+async function saveIfDirty(uri: vscode.Uri): Promise<void> {
+  const doc = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+  if (doc && doc.isDirty) await doc.save();
+}
+
+function workspaceCwd(uri?: vscode.Uri): string | undefined {
+  if (uri) {
+    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    if (folder) return folder.uri.fsPath;
+    return path.dirname(uri.fsPath);
+  }
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+function registerCommands(context: vscode.ExtensionContext): void {
+  const config = () => vscode.workspace.getConfiguration('typelua');
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('typelua.runFile', async () => {
+      const uri = activeTypeluaFile();
+      if (!uri) {
+        void vscode.window.showErrorMessage('TypeLua: open a .tl file first.');
+        return;
+      }
+      await saveIfDirty(uri);
+      const args = config().get<boolean>('run.check')
+        ? ['run', '--check', uri.fsPath]
+        : ['run', uri.fsPath];
+      runTask('TypeLua: Run ' + path.basename(uri.fsPath), args, workspaceCwd(uri));
+    }),
+    vscode.commands.registerCommand('typelua.debugFile', async () => {
+      const uri = activeTypeluaFile();
+      if (!uri) {
+        void vscode.window.showErrorMessage('TypeLua: open a .tl file first.');
+        return;
+      }
+      await saveIfDirty(uri);
+      const folder = vscode.workspace.getWorkspaceFolder(uri);
+      await vscode.debug.startDebugging(folder, {
+        type: 'typelua',
+        request: 'launch',
+        name: 'Debug ' + path.basename(uri.fsPath),
+        program: uri.fsPath,
+      });
+    }),
+    vscode.commands.registerCommand('typelua.check', () => {
+      runTask('TypeLua: Check', ['check'], workspaceCwd());
+    }),
+    vscode.commands.registerCommand('typelua.build', () => {
+      runTask('TypeLua: Build', ['build'], workspaceCwd());
+    }),
+    vscode.commands.registerCommand('typelua.testWorkspace', () => {
+      const extra = config().get<string[]>('test.args') ?? [];
+      runTask('TypeLua: Test', ['test', ...extra], workspaceCwd());
+    }),
+    vscode.commands.registerCommand('typelua.testFile', async () => {
+      const uri = activeTypeluaFile();
+      if (!uri) {
+        void vscode.window.showErrorMessage('TypeLua: open a test file first.');
+        return;
+      }
+      await saveIfDirty(uri);
+      const extra = config().get<string[]>('test.args') ?? [];
+      runTask(
+        'TypeLua: Test ' + path.basename(uri.fsPath),
+        ['test', uri.fsPath, ...extra],
+        workspaceCwd(uri),
+      );
+    }),
+    vscode.commands.registerCommand('typelua.runExample', async () => {
+      const exe = tluaExecutable();
+      if (!exe) return;
+      const cwd = workspaceCwd();
+      const res = await execFileP(exe, ['example'], cwd);
+      const examples: Array<{ name: string; detail: string }> = [];
+      for (const line of res.stdout.split('\n')) {
+        const match = /^\s{2}(\S+)(?:\s{2,}(.*))?$/.exec(line);
+        if (match) examples.push({ name: match[1], detail: match[2] ?? '' });
+      }
+      if (examples.length === 0) {
+        void vscode.window.showWarningMessage('TypeLua: no examples found (examples/*.tl or examples/*/main.tl).');
+        return;
+      }
+      const picked = await vscode.window.showQuickPick(
+        examples.map((e) => ({ label: e.name, description: e.detail })),
+        { placeHolder: 'Select a TypeLua example to run' },
+      );
+      if (picked) runTask('TypeLua: Example ' + picked.label, ['example', picked.label], cwd);
+    }),
+  );
+}
+
+// --- Debug adapter ---------------------------------------------------------
+
+function registerDebugging(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(
+    vscode.debug.registerDebugAdapterDescriptorFactory('typelua', {
+      createDebugAdapterDescriptor: (session) => {
+        const exe = tluaExecutable();
+        if (!exe) return undefined;
+        return new vscode.DebugAdapterExecutable(exe, ['dap'], {
+          cwd: session.workspaceFolder?.uri.fsPath,
+        });
+      },
+    }),
+    vscode.debug.registerDebugConfigurationProvider('typelua', {
+      resolveDebugConfiguration: (folder, configuration) => {
+        const config = configuration;
+        if (!config.type) config.type = 'typelua';
+        if (!config.request) config.request = 'launch';
+        if (!config.program) {
+          const uri = activeTypeluaFile();
+          if (uri) config.program = uri.fsPath;
+        }
+        if (!config.program) {
+          void vscode.window.showErrorMessage('TypeLua: launch.json needs a "program" (a .tl file).');
+          return undefined;
+        }
+        if (config.check === undefined) {
+          config.check = vscode.workspace.getConfiguration('typelua').get<boolean>('debug.check') ?? false;
+        }
+        if (!config.lua) {
+          const lua = vscode.workspace.getConfiguration('typelua').get<string>('lua.path') ?? '';
+          if (lua) config.lua = lua;
+        }
+        if (!config.cwd && folder) config.cwd = folder.uri.fsPath;
+        return config;
+      },
+      provideDebugConfigurations: () => [
+        {
+          type: 'typelua',
+          request: 'launch',
+          name: 'Debug TypeLua',
+          program: '${file}',
+          stopOnEntry: true,
+        },
+      ],
+    }),
+  );
+}
+
+interface DebugRunEntry {
+  run: vscode.TestRun;
+  item: vscode.TestItem;
+  children: vscode.TestItem[];
+}
+
+const sessionTestResults = new Map<string, { ok: boolean; message: string }>();
+const sessionTestEntries = new Map<string, DebugRunEntry>();
+const pendingDebugItems: Array<{ item: vscode.TestItem; run: vscode.TestRun; children: vscode.TestItem[] }> = [];
+const outstandingByRun = new Map<vscode.TestRun, number>();
+
+function registerTestDebugTracker(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(
+    vscode.debug.registerDebugAdapterTrackerFactory('typelua', {
+      createDebugAdapterTracker: (session) => ({
+        onDidSendMessage: (message: any) => {
+          if (message?.type === 'event' && message.event === 'typelua/testResult') {
+            sessionTestResults.set(session.id, {
+              ok: Boolean(message.body?.ok),
+              message: String(message.body?.message ?? ''),
+            });
+          }
+        },
+      }),
+    }),
+    vscode.debug.onDidStartDebugSession((session) => {
+      if (session.configuration?.type !== 'typelua' || !session.configuration?.test) return;
+      const pending = pendingDebugItems.shift();
+      if (pending) sessionTestEntries.set(session.id, pending);
+    }),
+    vscode.debug.onDidTerminateDebugSession((session) => {
+      const entry = sessionTestEntries.get(session.id);
+      if (!entry) return;
+      sessionTestEntries.delete(session.id);
+      const result = sessionTestResults.get(session.id);
+      sessionTestResults.delete(session.id);
+      const ok = result?.ok ?? false;
+      if (ok) {
+        entry.run.passed(entry.item);
+        for (const child of entry.children) entry.run.passed(child);
+      } else {
+        entry.run.failed(entry.item, new vscode.TestMessage(result?.message || 'test failed'));
+      }
+      const left = (outstandingByRun.get(entry.run) ?? 1) - 1;
+      if (left <= 0) {
+        outstandingByRun.delete(entry.run);
+        entry.run.end();
+      } else {
+        outstandingByRun.set(entry.run, left);
+      }
+    }),
+  );
+}
+
+// --- Test Explorer ---------------------------------------------------------
+
+function parseCaseResults(stdout: string): Array<{ module: string; case: string; ok: boolean; message: string }> {
+  const out: Array<{ module: string; case: string; ok: boolean; message: string }> = [];
+  for (const line of stdout.split('\n')) {
+    const text = line.trim();
+    if (!text.startsWith('{')) continue;
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed.case === 'string' && typeof parsed.ok === 'boolean') {
+        out.push({
+          module: String(parsed.module ?? ''),
+          case: parsed.case,
+          ok: parsed.ok,
+          message: String(parsed.message ?? ''),
+        });
+      }
+    } catch {
+      // ignore non-JSON lines (task banners, etc.)
+    }
+  }
+  return out;
+}
+
+async function discoverInto(controller: vscode.TestController): Promise<void> {
+  const exe = tluaExecutable();
+  if (!exe) return;
+  const roots: vscode.TestItem[] = [];
+  testItemIndex.clear();
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const res = await execFileP(exe, ['test', '--list', '--format=json'], folder.uri.fsPath);
+    const byFile = new Map<string, ListedCase[]>();
+    for (const line of res.stdout.split('\n')) {
+      const text = line.trim();
+      if (!text.startsWith('{')) continue;
+      try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed.file !== 'string' || typeof parsed.case !== 'string') continue;
+        const list = byFile.get(parsed.file) ?? [];
+        list.push({ module: String(parsed.module ?? ''), case: parsed.case, file: parsed.file });
+        byFile.set(parsed.file, list);
+      } catch {
+        // ignore
+      }
+    }
+    for (const [file, cases] of byFile) {
+      const uri = vscode.Uri.file(file);
+      const fileItem = controller.createTestItem('file:' + file, path.basename(file), uri);
+      const children: vscode.TestItem[] = [];
+      for (const c of cases) {
+        const childId = 'case:' + file + '::' + c.case;
+        const child = controller.createTestItem(childId, c.case, uri);
+        testItemIndex.set(childId, child);
+        children.push(child);
+      }
+      fileItem.children.replace(children);
+      roots.push(fileItem);
+    }
+  }
+  controller.items.replace(roots);
+}
+
+function scheduleDiscovery(): void {
+  if (!testController) return;
+  if (discoveryTimer) clearTimeout(discoveryTimer);
+  discoveryTimer = setTimeout(() => {
+    discoveryTimer = undefined;
+    if (testController) void discoverInto(testController);
+  }, 400);
+}
+
+function allRootItems(controller: vscode.TestController): vscode.TestItem[] {
+  const out: vscode.TestItem[] = [];
+  controller.items.forEach((item) => out.push(item));
+  return out;
+}
+
+function expandRunItems(items: readonly vscode.TestItem[]): vscode.TestItem[] {
+  const out: vscode.TestItem[] = [];
+  for (const item of items) {
+    if (item.children.size > 0 && !item.id.startsWith('case:')) out.push(item);
+    else out.push(item);
+  }
+  return out;
+}
+
+async function runTestRequest(
+  controller: vscode.TestController,
+  request: vscode.TestRunRequest,
+  token: vscode.CancellationToken,
+): Promise<void> {
+  const run = controller.createTestRun(request);
+  const exe = tluaExecutable();
+  if (!exe) {
+    run.end();
+    return;
+  }
+  const extra = vscode.workspace.getConfiguration('typelua').get<string[]>('test.args') ?? [];
+  const items = request.include ? [...request.include] : allRootItems(controller);
+  for (const item of expandRunItems(items)) {
+    if (token.isCancellationRequested) break;
+    const uri = item.uri;
+    if (!uri || uri.scheme !== 'file') continue;
+    const cwd = workspaceCwd(uri);
+    const isFile = item.children.size > 0 && !item.id.startsWith('case:');
+    const caseName = item.id.startsWith('case:') ? item.label : undefined;
+    run.started(item);
+    const children: vscode.TestItem[] = [];
+    if (isFile) {
+      for (const [, child] of item.children) {
+        run.started(child);
+        children.push(child);
+      }
+    }
+    try {
+      const args = ['test', uri.fsPath, ...extra];
+      if (caseName) args.push('--case', caseName);
+      args.push('--format=json');
+      const res = await execFileP(exe, args, cwd);
+      const results = parseCaseResults(res.stdout);
+      if (results.length === 0) {
+        const message = res.stderr.trim() || 'no test results were produced';
+        if (isFile) run.failed(item, new vscode.TestMessage(message));
+        else run.failed(item, new vscode.TestMessage(message));
+        continue;
+      }
+      let anyFailed = false;
+      for (const r of results) {
+        const target = isFile
+          ? item.children.get('case:' + uri.fsPath + '::' + r.case) ?? item
+          : item;
+        if (target !== item && !target.id.startsWith('case:')) {
+          // unknown case (should not happen); fall back to the file item
+        }
+        if (r.ok) run.passed(target);
+        else {
+          anyFailed = true;
+          run.failed(target, new vscode.TestMessage(r.message || 'assertion failed'));
+        }
+      }
+      if (isFile) {
+        if (anyFailed) run.failed(item, new vscode.TestMessage('one or more cases failed'));
+        else run.passed(item);
+      }
+    } catch (err) {
+      run.errored(item, new vscode.TestMessage(err instanceof Error ? err.message : String(err)));
+    }
+  }
+  run.end();
+}
+
+async function debugTestRequest(
+  controller: vscode.TestController,
+  request: vscode.TestRunRequest,
+  token: vscode.CancellationToken,
+): Promise<void> {
+  const run = controller.createTestRun(request);
+  const items = request.include ? [...request.include] : allRootItems(controller);
+  let started = 0;
+  for (const item of expandRunItems(items)) {
+    if (token.isCancellationRequested) break;
+    const uri = item.uri;
+    if (!uri || uri.scheme !== 'file') continue;
+    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    const isFile = item.children.size > 0 && !item.id.startsWith('case:');
+    const caseName = item.id.startsWith('case:') ? item.label : undefined;
+    const children: vscode.TestItem[] = [];
+    if (isFile) for (const [, child] of item.children) children.push(child);
+
+    run.started(item);
+    outstandingByRun.set(run, (outstandingByRun.get(run) ?? 0) + 1);
+    pendingDebugItems.push({ item, run, children });
+    const ok = await vscode.debug.startDebugging(folder, {
+      type: 'typelua',
+      request: 'launch',
+      name: 'Debug ' + item.label,
+      program: uri.fsPath,
+      test: uri.fsPath,
+      ...(caseName ? { testCase: caseName } : {}),
+    });
+    if (!ok) {
+      pendingDebugItems.pop();
+      const left = (outstandingByRun.get(run) ?? 1) - 1;
+      if (left <= 0) {
+        outstandingByRun.delete(run);
+        run.end();
+      } else {
+        outstandingByRun.set(run, left);
+      }
+      continue;
+    }
+    started++;
+  }
+  if (started === 0) run.end();
+}
+
+function setupTesting(context: vscode.ExtensionContext): void {
+  const controller = vscode.tests.createTestController('typelua', 'TypeLua');
+  testController = controller;
+  context.subscriptions.push(controller);
+  controller.refreshHandler = async () => {
+    await discoverInto(controller);
+  };
+  controller.createRunProfile(
+    'Run',
+    vscode.TestRunProfileKind.Run,
+    (request, token) => runTestRequest(controller, request, token),
+    true,
+  );
+  controller.createRunProfile(
+    'Debug',
+    vscode.TestRunProfileKind.Debug,
+    (request, token) => debugTestRequest(controller, request, token),
+    true,
+  );
+
+  const watchers = [
+    vscode.workspace.createFileSystemWatcher('**/*.tl'),
+    vscode.workspace.createFileSystemWatcher('**/tlua.json'),
+  ];
+  for (const watcher of watchers) {
+    const handler = (uri: vscode.Uri) => {
+      if (uri.fsPath.includes('tlua_modules') || uri.fsPath.includes(`${path.sep}dist${path.sep}`)) return;
+      scheduleDiscovery();
+    };
+    watcher.onDidCreate(handler);
+    watcher.onDidChange(handler);
+    watcher.onDidDelete(handler);
+    context.subscriptions.push(watcher);
+  }
+  void discoverInto(controller);
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   outputChannel = vscode.window.createOutputChannel(OUTPUT_NAME);
   context.subscriptions.push(outputChannel);
@@ -504,6 +1015,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
   );
+
+  extContext = context;
+  registerCommands(context);
+  registerDebugging(context);
+  registerTestDebugTracker(context);
+  setupTesting(context);
 
   await startClient(context);
 }

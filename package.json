@@ -1,40 +1,51 @@
 {
   "name": "typelua",
   "displayName": "TypeLua",
-  "description": "TypeLua language support: syntax highlighting, snippets, and full IDE features (diagnostics, hover, completion, go to definition, references, rename, document symbols) powered by the tlua language server.",
-  "version": "0.1.3",
+  "description": "TypeLua language support: syntax, snippets, LSP features (diagnostics, hover, completion, navigation, rename), Test Explorer with run/debug, and breakpoint debugging.",
+  "version": "0.2.0",
   "publisher": "typelua",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/typelua/typelua"
+    "url": "https://github.com/types-lua/vscode-typelua"
   },
-  "homepage": "https://github.com/typelua/typelua",
+  "homepage": "https://types-lua.github.io/docs/",
   "categories": [
     "Programming Languages",
     "Linters",
-    "Snippets"
+    "Snippets",
+    "Debuggers",
+    "Testing"
   ],
   "keywords": [
     "lua",
     "typelua",
     "types",
-    "lsp"
+    "lsp",
+    "debugger",
+    "test"
   ],
   "engines": {
     "vscode": "^1.90.0"
   },
   "activationEvents": [
     "onLanguage:typelua",
-    "workspaceContains:**/*.tl"
+    "workspaceContains:**/*.tl",
+    "onStartupFinished",
+    "onDebugResolve:typelua"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "typelua",
-        "aliases": ["TypeLua", "typelua"],
-        "extensions": [".tl"],
+        "aliases": [
+          "TypeLua",
+          "typelua"
+        ],
+        "extensions": [
+          ".tl"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -61,13 +72,21 @@
         },
         "typelua.server.args": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["lsp"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "lsp"
+          ],
           "description": "Arguments passed to the language server executable."
         },
         "typelua.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Traces the communication between VS Code and the TypeLua language server."
         },
@@ -80,6 +99,29 @@
           "type": "number",
           "default": 10000,
           "description": "Milliseconds to wait for the server to become ready before showing a warning notification (0 disables the watchdog)."
+        },
+        "typelua.lua.path": {
+          "type": "string",
+          "default": "",
+          "description": "Lua interpreter used by the debugger (default: auto-detect lua5.4, then luajit)."
+        },
+        "typelua.run.check": {
+          "type": "boolean",
+          "default": true,
+          "description": "Type-check before \"Run File\"."
+        },
+        "typelua.debug.check": {
+          "type": "boolean",
+          "default": false,
+          "description": "Type-check before starting a debug session."
+        },
+        "typelua.test.args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra arguments passed to `tlua test` (for example [\"--lua\",\"lua5.4\"])."
         }
       }
     },
@@ -93,6 +135,195 @@
         "command": "typelua.showOutput",
         "title": "Show Language Server Output",
         "category": "TypeLua"
+      },
+      {
+        "command": "typelua.runFile",
+        "title": "Run File",
+        "category": "TypeLua",
+        "icon": "$(play)"
+      },
+      {
+        "command": "typelua.debugFile",
+        "title": "Debug File",
+        "category": "TypeLua",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "typelua.check",
+        "title": "Check Project",
+        "category": "TypeLua",
+        "icon": "$(check)"
+      },
+      {
+        "command": "typelua.build",
+        "title": "Build Project",
+        "category": "TypeLua",
+        "icon": "$(package)"
+      },
+      {
+        "command": "typelua.testWorkspace",
+        "title": "Run All Tests",
+        "category": "TypeLua",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "typelua.testFile",
+        "title": "Run Test File",
+        "category": "TypeLua",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "typelua.runExample",
+        "title": "Run Example\u2026",
+        "category": "TypeLua",
+        "icon": "$(rocket)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "typelua.runFile",
+          "when": "editorLangId == typelua",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typelua.debugFile",
+          "when": "editorLangId == typelua",
+          "group": "navigation@2"
+        },
+        {
+          "command": "typelua.testFile",
+          "when": "editorLangId == typelua",
+          "group": "navigation@3"
+        },
+        {
+          "command": "typelua.check",
+          "when": "editorLangId == typelua",
+          "group": "navigation@4"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "typelua.runFile",
+          "when": "editorLangId == typelua",
+          "group": "navigation@1"
+        },
+        {
+          "command": "typelua.debugFile",
+          "when": "editorLangId == typelua",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "typelua.testFile",
+          "when": "editorLangId == typelua"
+        },
+        {
+          "command": "typelua.runFile",
+          "when": "editorLangId == typelua"
+        },
+        {
+          "command": "typelua.debugFile",
+          "when": "editorLangId == typelua"
+        }
+      ]
+    },
+    "debuggers": [
+      {
+        "type": "typelua",
+        "label": "TypeLua",
+        "languages": [
+          "typelua"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "TypeLua entry file (.tl)."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [],
+                "description": "Script arguments (arg[1..])."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory (defaults to the workspace folder)."
+              },
+              "lua": {
+                "type": "string",
+                "description": "Lua interpreter (default: auto-detect lua5.4/luajit)."
+              },
+              "target": {
+                "type": "string",
+                "enum": [
+                  "5.4",
+                  "5.1"
+                ],
+                "description": "Lua target used when emitting."
+              },
+              "check": {
+                "type": "boolean",
+                "default": false,
+                "description": "Type-check before running."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": false,
+                "description": "Break on the first line."
+              },
+              "test": {
+                "type": "string",
+                "description": "Test file to debug (used by the Test Explorer)."
+              },
+              "testCase": {
+                "type": "string",
+                "description": "Single case to run while debugging a test."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "typelua",
+            "request": "launch",
+            "name": "Debug TypeLua",
+            "program": "${file}",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "TypeLua: Launch program",
+            "description": "Debug the current file",
+            "body": {
+              "type": "typelua",
+              "request": "launch",
+              "name": "Debug TypeLua",
+              "program": "${file}",
+              "stopOnEntry": true
+            }
+          },
+          {
+            "label": "TypeLua: Debug test case",
+            "description": "Debug the test file under the cursor",
+            "body": {
+              "type": "typelua",
+              "request": "launch",
+              "name": "Debug TypeLua test",
+              "program": "${file}",
+              "test": "${file}"
+            }
+          }
+        ]
       }
     ]
   },

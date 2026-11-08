@@ -1,6 +1,9 @@
 {
   "Local function": {
-    "prefix": ["lfunc", "local function"],
+    "prefix": [
+      "lfunc",
+      "local function"
+    ],
     "body": [
       "local function ${1:name}(${2:args}): ${3:void}",
       "\t${0}",
@@ -140,5 +143,64 @@
     "prefix": "print",
     "body": "print(${0})",
     "description": "Print to stdout"
+  },
+  "Test case": {
+    "prefix": "test",
+    "body": [
+      "import T from \"tlua_test\"",
+      "",
+      "return {",
+      "\t[\"${1:case name}\"] = function(): void",
+      "\t\t${0:T.eq(actual, expected)}",
+      "\tend,",
+      "}"
+    ],
+    "description": "TypeLua test file using the built-in tlua_test assertions"
+  },
+  "Relative import": {
+    "prefix": "importrel",
+    "body": "import ${1:Name} from \"./${2:module}\"",
+    "description": "Package-local (relative) import"
+  },
+  "Async function": {
+    "prefix": [
+      "async",
+      "afunc"
+    ],
+    "body": [
+      "async function ${1:name}(): ${2:void}",
+      "\t${0}",
+      "end"
+    ],
+    "description": "Async function (await/spawn scheduling)"
+  },
+  "Spawn task": {
+    "prefix": "spawn",
+    "body": "spawn ${1:worker}()",
+    "description": "Spawn a cooperative task"
+  },
+  "Defer cleanup": {
+    "prefix": "defer",
+    "body": "defer ${1:cleanup}()",
+    "description": "Run a call at function exit (LIFO)"
+  },
+  "Macro": {
+    "prefix": "macro",
+    "body": [
+      "macro ${1:name}(${2:arg}) = (${3:arg})"
+    ],
+    "description": "Hygienic expression macro"
+  },
+  "Select block": {
+    "prefix": "select",
+    "body": [
+      "select {",
+      "\tcase local ${1:v} = ${2:ch}:recv() then",
+      "\t\t${3:print(v)}",
+      "\tdefault then",
+      "\t\t${0}",
+      "}"
+    ],
+    "description": "Channel select with default"
   }
 }

@@ -9,7 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const TEST_TLUA_DIR = '/home/tang/TypeLua';
+const TEST_TLUA_DIR = process.env.TYPELUA_REPO || path.join(__dirname, '..', '..', 'TypeLua');
 const BIN = path.join(__dirname, 'tlua-testbin');
 const URI = 'file:///tmp/typelua-lsp-contract.tl';
 

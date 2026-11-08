@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0
+
+- Test Explorer: discovers `tests/**` and `*_test.tl` cases through
+  `tlua test --list`, with Run and Debug profiles, per-case results parsed
+  from `--format=json`, and refresh on file changes.
+- Breakpoint debugging: contributes the `typelua` debugger backed by
+  `tlua dap` (source-mapped breakpoints, step in/over/out, call stack,
+  locals, program output). Debugging a test reports pass/fail back to the
+  Testing view via a custom DAP event.
+- Commands: Run File, Debug File, Check Project, Build Project, Run All
+  Tests, Run Test File, Run Example…; editor title/context menus.
+- Settings: `typelua.lua.path`, `typelua.run.check`, `typelua.debug.check`,
+  `typelua.test.args`.
+- Grammar: async/await/spawn/select/case/default, `chan` and FFI types,
+  `->`/`=>` operators; new snippets for tests, relative imports, async,
+  defer, macros and select.
+- Fix bundled-server arch names (`x64` → `amd64`) to match release assets.
+- Tests: manifest checks for the debugger, grammar coverage for the new
+  keywords, and a portable example-corpus path.
+
 ## 0.1.3
 
 - Friendly bottom-right notifications whenever the language server has no

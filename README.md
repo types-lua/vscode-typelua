@@ -1,7 +1,8 @@
 # TypeLua for VS Code
 
 TypeLua language support for Visual Studio Code: syntax highlighting,
-snippets, and full IDE features powered by the `tlua` language server.
+snippets, full IDE features from the `tlua` language server, a Test Explorer
+with run/debug, and breakpoint debugging through `tlua dap`.
 
 ## Features
 
@@ -14,7 +15,54 @@ snippets, and full IDE features powered by the `tlua` language server.
 | Go to definition | Values, type names, members, enum entries |
 | Find references / rename | Including members and `obj["field"]` forms |
 | Document symbols / outline | Classes, functions, variables, types |
-| Snippets | `class`, `interface`, `enum`, typed functions, loops, macros, `import`, `defer` … |
+| Snippets | `class`, `interface`, `enum`, typed functions, loops, macros, `import`, `defer`, `test`, `async`, `select` … |
+| Test Explorer | Discovers `tests/**` and `*_test.tl` cases; run or debug one case, a file, or the whole workspace from the Testing view |
+| Debugging | Breakpoints, step in/over/out, call stack, locals, program output, test-result reporting; launch with `F5` on any `.tl` file |
+
+## Debugging
+
+Press `F5` on a `.tl` file (or run **TypeLua: Debug File**) to start a session.
+`launch.json`:
+
+```json
+{
+  "type": "typelua",
+  "request": "launch",
+  "name": "Debug TypeLua",
+  "program": "${file}",
+  "args": [],
+  "stopOnEntry": false,
+  "check": false
+}
+```
+
+- The adapter runs `tlua dap`, compiles the project with source maps, and
+  debugs the emitted Lua through an external interpreter (auto-detected
+  `lua5.4`, then `luajit`; override with `lua` or `typelua.lua.path`).
+- Breakpoints map back to `.tl` lines; locals, stack and program output work
+  in the standard Debug view. Breakpoints edited while the program is running
+  apply at the next stop.
+- The Test Explorer's **Debug** profile launches a case and reports pass/fail
+  back to the Testing view.
+
+## Test Explorer
+
+The Testing view lists every discovered case (`tests/**/*.tl`, `*_test.tl`,
+`*.test.tl`). Use the inline ▶ or 🐞 to run or debug a case; the refresh button
+re-discovers tests. Discovery and running use `tlua test --list` and
+`tlua test --case`, so results match the command line exactly.
+
+## Commands
+
+| Command | Action |
+|---|---|
+| TypeLua: Run File | `tlua run [--check] <file>` in a task terminal |
+| TypeLua: Debug File | Start a debug session for the current file |
+| TypeLua: Check Project | `tlua check` |
+| TypeLua: Build Project | `tlua build` |
+| TypeLua: Run All Tests | `tlua test` |
+| TypeLua: Run Test File | `tlua test <file>` |
+| TypeLua: Run Example… | Pick from `tlua example` and run it |
 
 ## Requirements
 
@@ -37,6 +85,10 @@ that opens the right setting.
 - `typelua.server.maxRestarts`: auto-restart budget after crashes (default 3/min).
 - `typelua.server.startTimeout`: ms to wait for server readiness before a
   warning popup (default 10000, 0 disables).
+- `typelua.lua.path`: interpreter for debugging (empty = auto-detect).
+- `typelua.run.check`: type-check before **Run File** (default true).
+- `typelua.debug.check`: type-check before a debug session (default false).
+- `typelua.test.args`: extra `tlua test` arguments (e.g. `["--lua","lua5.4"]`).
 
 ## Commands
 

@@ -1,24 +1,54 @@
 {
   "name": "TypeLua",
   "scopeName": "source.tlua",
-  "fileTypes": ["tl"],
-  "foldingStartMarker": "(?i)^\\s*(function\\b|if\\b|for\\b|while\\b|do\\b|repeat\\b|class\\b|interface\\b|enum\\b).*?$",
+  "fileTypes": [
+    "tl"
+  ],
+  "foldingStartMarker": "(?i)^\\s*(function\\b|if\\b|for\\b|while\\b|do\\b|repeat\\b|class\\b|interface\\b|enum\\b|macro\\b|select\\b).*?$",
   "foldingStopMarker": "(?i)^\\s*(end\\b|until\\b|\\}).*?$",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#numbers" },
-    { "include": "#declarations" },
-    { "include": "#keywords" },
-    { "include": "#constants" },
-    { "include": "#builtins" },
-    { "include": "#annotations" },
-    { "include": "#labels" },
-    { "include": "#calls" },
-    { "include": "#types" },
-    { "include": "#table-keys" },
-    { "include": "#operators" },
-    { "include": "#punctuation" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#declarations"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#builtins"
+    },
+    {
+      "include": "#annotations"
+    },
+    {
+      "include": "#labels"
+    },
+    {
+      "include": "#calls"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#table-keys"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#punctuation"
+    }
   ],
   "repository": {
     "comments": {
@@ -27,18 +57,24 @@
           "name": "comment.block.tlua",
           "begin": "--\\[(=*)\\[",
           "beginCaptures": {
-            "0": { "name": "punctuation.definition.comment.begin.tlua" }
+            "0": {
+              "name": "punctuation.definition.comment.begin.tlua"
+            }
           },
           "end": "\\]\\1\\]",
           "endCaptures": {
-            "0": { "name": "punctuation.definition.comment.end.tlua" }
+            "0": {
+              "name": "punctuation.definition.comment.end.tlua"
+            }
           }
         },
         {
           "name": "comment.line.double-dash.tlua",
           "match": "--.*$",
           "captures": {
-            "0": { "name": "comment.line.double-dash.tlua" }
+            "0": {
+              "name": "comment.line.double-dash.tlua"
+            }
           }
         }
       ]
@@ -49,11 +85,15 @@
           "name": "string.quoted.other.long.tlua",
           "begin": "\\[(=*)\\[",
           "beginCaptures": {
-            "0": { "name": "punctuation.definition.string.begin.tlua" }
+            "0": {
+              "name": "punctuation.definition.string.begin.tlua"
+            }
           },
           "end": "\\]\\1\\]",
           "endCaptures": {
-            "0": { "name": "punctuation.definition.string.end.tlua" }
+            "0": {
+              "name": "punctuation.definition.string.end.tlua"
+            }
           },
           "patterns": [
             {
@@ -66,11 +106,15 @@
           "name": "string.quoted.double.tlua",
           "begin": "\"",
           "beginCaptures": {
-            "0": { "name": "punctuation.definition.string.begin.tlua" }
+            "0": {
+              "name": "punctuation.definition.string.begin.tlua"
+            }
           },
           "end": "\"",
           "endCaptures": {
-            "0": { "name": "punctuation.definition.string.end.tlua" }
+            "0": {
+              "name": "punctuation.definition.string.end.tlua"
+            }
           },
           "patterns": [
             {
@@ -83,11 +127,15 @@
           "name": "string.quoted.single.tlua",
           "begin": "'",
           "beginCaptures": {
-            "0": { "name": "punctuation.definition.string.begin.tlua" }
+            "0": {
+              "name": "punctuation.definition.string.begin.tlua"
+            }
           },
           "end": "'",
           "endCaptures": {
-            "0": { "name": "punctuation.definition.string.end.tlua" }
+            "0": {
+              "name": "punctuation.definition.string.end.tlua"
+            }
           },
           "patterns": [
             {
@@ -116,58 +164,90 @@
           "name": "meta.declaration.class.tlua",
           "match": "\\b(abstract\\s+)?(local\\s+)?(class)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
-            "1": { "name": "storage.modifier.tlua" },
-            "2": { "name": "keyword.control.tlua" },
-            "3": { "name": "storage.type.tlua" },
-            "4": { "name": "entity.name.class.tlua" }
+            "1": {
+              "name": "storage.modifier.tlua"
+            },
+            "2": {
+              "name": "keyword.control.tlua"
+            },
+            "3": {
+              "name": "storage.type.tlua"
+            },
+            "4": {
+              "name": "entity.name.class.tlua"
+            }
           }
         },
         {
           "name": "meta.declaration.interface.tlua",
           "match": "\\b(interface)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
-            "1": { "name": "storage.type.tlua" },
-            "2": { "name": "entity.name.type.tlua" }
+            "1": {
+              "name": "storage.type.tlua"
+            },
+            "2": {
+              "name": "entity.name.type.tlua"
+            }
           }
         },
         {
           "name": "meta.declaration.enum.tlua",
           "match": "\\b(enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
-            "1": { "name": "storage.type.tlua" },
-            "2": { "name": "entity.name.type.tlua" }
+            "1": {
+              "name": "storage.type.tlua"
+            },
+            "2": {
+              "name": "entity.name.type.tlua"
+            }
           }
         },
         {
           "name": "meta.declaration.type-alias.tlua",
           "match": "\\b(type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
-            "1": { "name": "storage.type.tlua" },
-            "2": { "name": "entity.name.type.tlua" }
+            "1": {
+              "name": "storage.type.tlua"
+            },
+            "2": {
+              "name": "entity.name.type.tlua"
+            }
           }
         },
         {
           "name": "meta.declaration.macro.tlua",
           "match": "\\b(macro)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
-            "1": { "name": "keyword.control.tlua" },
-            "2": { "name": "entity.name.function.macro.tlua" }
+            "1": {
+              "name": "keyword.control.tlua"
+            },
+            "2": {
+              "name": "entity.name.function.macro.tlua"
+            }
           }
         },
         {
           "name": "meta.declaration.function.tlua",
           "match": "\\b(local\\s+)?(function)\\s+([A-Za-z_][A-Za-z0-9_.:]*)",
           "captures": {
-            "1": { "name": "keyword.control.tlua" },
-            "2": { "name": "keyword.control.tlua" },
-            "3": { "name": "entity.name.function.tlua" }
+            "1": {
+              "name": "keyword.control.tlua"
+            },
+            "2": {
+              "name": "keyword.control.tlua"
+            },
+            "3": {
+              "name": "entity.name.function.tlua"
+            }
           }
         },
         {
           "name": "meta.declaration.method.tlua",
           "match": "\\b(constructor)\\s*(?=\\()",
           "captures": {
-            "1": { "name": "entity.name.function.constructor.tlua" }
+            "1": {
+              "name": "entity.name.function.constructor.tlua"
+            }
           }
         }
       ]
@@ -176,11 +256,11 @@
       "patterns": [
         {
           "name": "keyword.control.tlua",
-          "match": "\\b(local|function|end|if|then|else|elseif|for|while|do|return|break|goto|repeat|until|in|and|or|not|declare|export|import|from|macro|defer|errdefer)\\b"
+          "match": "\\b(local|function|end|if|then|else|elseif|for|while|do|return|break|goto|repeat|until|in|and|or|not|declare|export|import|from|macro|defer|errdefer|async|await|spawn|select|case|default)\\b"
         },
         {
           "name": "storage.type.tlua",
-          "match": "\\b(type|interface|enum|class|extends|implements)\\b"
+          "match": "\\b(type|interface|enum|class|extends|implements|chan)\\b"
         },
         {
           "name": "storage.modifier.tlua",
@@ -188,7 +268,7 @@
         },
         {
           "name": "keyword.operator.word.tlua",
-          "match": "\\b(as|infer|keyof|typeof|super)\\b"
+          "match": "\\b(as|infer|keyof|typeof|super|is)\\b"
         },
         {
           "name": "variable.language.self.tlua",
@@ -222,9 +302,15 @@
           "name": "meta.annotation.attribute.tlua",
           "match": "(<)(const|close)(>)",
           "captures": {
-            "1": { "name": "punctuation.definition.annotation.begin.tlua" },
-            "2": { "name": "storage.modifier.attribute.tlua" },
-            "3": { "name": "punctuation.definition.annotation.end.tlua" }
+            "1": {
+              "name": "punctuation.definition.annotation.begin.tlua"
+            },
+            "2": {
+              "name": "storage.modifier.attribute.tlua"
+            },
+            "3": {
+              "name": "punctuation.definition.annotation.end.tlua"
+            }
           }
         }
       ]
@@ -235,9 +321,15 @@
           "name": "meta.label.tlua",
           "match": "(::)([A-Za-z_][A-Za-z0-9_]*)(::)",
           "captures": {
-            "1": { "name": "punctuation.definition.label.begin.tlua" },
-            "2": { "name": "entity.name.label.tlua" },
-            "3": { "name": "punctuation.definition.label.end.tlua" }
+            "1": {
+              "name": "punctuation.definition.label.begin.tlua"
+            },
+            "2": {
+              "name": "entity.name.label.tlua"
+            },
+            "3": {
+              "name": "punctuation.definition.label.end.tlua"
+            }
           }
         }
       ]
@@ -248,15 +340,21 @@
           "name": "meta.method-call.tlua",
           "match": "([:.])([A-Za-z_][A-Za-z0-9_]*)(?=\\s*[\\(<])",
           "captures": {
-            "1": { "name": "punctuation.accessor.tlua" },
-            "2": { "name": "entity.name.function.method.tlua" }
+            "1": {
+              "name": "punctuation.accessor.tlua"
+            },
+            "2": {
+              "name": "entity.name.function.method.tlua"
+            }
           }
         },
         {
           "name": "meta.function-call.tlua",
           "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\(|\"|'|\\[\\[|\\[=)",
           "captures": {
-            "1": { "name": "entity.name.function.tlua" }
+            "1": {
+              "name": "entity.name.function.tlua"
+            }
           }
         }
       ]
@@ -269,7 +367,7 @@
         },
         {
           "name": "storage.type.primitive.tlua",
-          "match": "\\b(any|unknown|never|void|boolean|number|integer|float|string|table|function|thread|userdata)\\b"
+          "match": "\\b(any|unknown|never|void|boolean|number|integer|float|string|table|function|thread|userdata|cdata|ctype)\\b"
         }
       ]
     },
@@ -279,13 +377,19 @@
           "name": "meta.mapping.key.tlua",
           "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(?==[^=])",
           "captures": {
-            "1": { "name": "variable.other.property.tlua" }
+            "1": {
+              "name": "variable.other.property.tlua"
+            }
           }
         }
       ]
     },
     "operators": {
       "patterns": [
+        {
+          "name": "keyword.operator.arrow.tlua",
+          "match": "->|=>"
+        },
         {
           "name": "keyword.operator.tlua",
           "match": "!=|~=|==|<=|>=|<<|>>|//|\\.\\.|[+\\-*/%^#&|~<>=]"
@@ -300,7 +404,7 @@
       "patterns": [
         {
           "name": "punctuation.separator.tlua",
-          "match": "[,;:]" 
+          "match": "[,;:]"
         },
         {
           "name": "punctuation.brace.tlua",

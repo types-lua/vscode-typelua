@@ -22,6 +22,27 @@ function makeVscode(configValues) {
   const dismiss = Promise.resolve(undefined);
   const statusBar = { text: '', tooltip: '', backgroundColor: undefined, command: '', shown: false, show() { this.shown = true; } };
   const outputLines = [];
+  const disposable = { dispose: () => {} };
+  const emptyChildren = {
+    size: 0,
+    replace() {},
+    get() { return undefined; },
+    *[Symbol.iterator]() {},
+  };
+  const controller = {
+    items: { replace() {}, forEach() {} },
+    createTestItem: (id, label, uri) => ({ id, label, uri, children: emptyChildren }),
+    createRunProfile: () => disposable,
+    createTestRun: () => ({
+      started() {}, passed() {}, failed() {}, errored() {}, skipped() {}, end() {},
+    }),
+    refreshHandler: undefined,
+    dispose: () => {},
+  };
+  const run = {
+    started() {}, passed() {}, failed() {}, errored() {}, skipped() {}, end() {},
+  };
+  const uri = (p) => ({ fsPath: p, scheme: 'file', path: p, toString: () => 'file://' + p });
   const vscode = {
     StatusBarAlignment: { Right: 1 },
     ThemeColor: class ThemeColor { constructor(id) { this.id = id; } },
@@ -35,11 +56,43 @@ function makeVscode(configValues) {
       showErrorMessage: (msg) => { calls.errors.push(String(msg)); return dismiss; },
       showWarningMessage: (msg) => { calls.warnings.push(String(msg)); return dismiss; },
       showInformationMessage: (msg) => { calls.infos.push(String(msg)); return dismiss; },
+      showQuickPick: async () => undefined,
     },
     workspace: {
       getConfiguration: () => ({ get: (k) => configValues[k] }),
-      onDidChangeConfiguration: () => ({ dispose: () => {} }),
+      onDidChangeConfiguration: () => disposable,
+      workspaceFolders: [],
+      getWorkspaceFolder: () => undefined,
+      createFileSystemWatcher: () => ({
+        onDidCreate: () => disposable,
+        onDidChange: () => disposable,
+        onDidDelete: () => disposable,
+        dispose: () => {},
+      }),
+      textDocuments: [],
     },
+    debug: {
+      registerDebugAdapterDescriptorFactory: () => disposable,
+      registerDebugConfigurationProvider: () => disposable,
+      registerDebugAdapterTrackerFactory: () => disposable,
+      onDidStartDebugSession: () => disposable,
+      onDidTerminateDebugSession: () => disposable,
+      startDebugging: async () => true,
+    },
+    tests: {
+      createTestController: () => controller,
+    },
+    tasks: {
+      Task: class Task {},
+      ShellExecution: class ShellExecution {},
+      TaskScope: { Workspace: 1 },
+      TaskRevealKind: { Always: 1, Silent: 2 },
+      TaskPanelKind: { Dedicated: 1 },
+      executeTask: async () => ({ terminate() {} }),
+    },
+    Uri: { file: uri },
+    TestRunProfileKind: { Run: 1, Debug: 2, Coverage: 3 },
+    TestMessage: class TestMessage { constructor(message) { this.message = message; } },
     commands: {
       registered: {},
       registerCommand: (id, fn) => { vscode.commands.registered[id] = fn; return { dispose: () => {} }; },
