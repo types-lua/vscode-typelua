@@ -2,7 +2,7 @@
   "name": "typelua",
   "displayName": "TypeLua",
   "description": "TypeLua language support: syntax, snippets, LSP features (diagnostics, hover, completion, navigation, rename), Test Explorer with run/debug, and breakpoint debugging.",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "publisher": "typelua",
   "license": "MIT",
   "repository": {
@@ -32,7 +32,9 @@
     "onLanguage:typelua",
     "workspaceContains:**/*.tl",
     "onStartupFinished",
-    "onDebugResolve:typelua"
+    "onDebugResolve:typelua",
+    "onDebugInitialConfigurations",
+    "onDebugDynamicConfigurations:typelua"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -234,7 +236,8 @@
         "type": "typelua",
         "label": "TypeLua",
         "languages": [
-          "typelua"
+          "typelua",
+          "lua"
         ],
         "configurationAttributes": {
           "launch": {

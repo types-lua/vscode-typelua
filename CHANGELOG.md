@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.4
+
+- Register the debugger for both `typelua` and `lua` file languages. The DAP
+  debugs valid Lua as well as TypeLua, so breakpoints keep working if a `.tl`
+  buffer was manually switched to Lua mode.
+- Log test discovery failures and file counts to the TypeLua output channel,
+  making an empty Test Explorer diagnosable.
+
+## 0.2.3
+
+- Fix Test Explorer runs: `tlua test` uses Go's flag parser, which stops at
+  the first file argument. `--case` and `--format=json` were appended after
+  the file, so per-case runs (and file runs with `typelua.test.args`) failed.
+  Flags now precede the file path in both Test Explorer and **Run Test File**.
+- Activate on `onDebugInitialConfigurations` /
+  `onDebugDynamicConfigurations:typelua`, so the debugger and Test Explorer
+  are registered before launch.json configuration UI starts.
+
 ## 0.2.2
 
 - Ignore a `typelua.lua.path` that points at the `tlua` compiler (the path is

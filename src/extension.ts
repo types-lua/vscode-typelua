@@ -788,6 +788,11 @@ async function discoverInto(controller: vscode.TestController): Promise<void> {
   testItemIndex.clear();
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const res = await execFileP(exe, ['test', '--list', '--format=json'], folder.uri.fsPath);
+    if (res.code !== 0) {
+      outputChannel.appendLine(
+        `test discovery failed in ${folder.uri.fsPath}: ${res.stderr.trim() || `exit ${res.code}`}`,
+      );
+    }
     const byFile = new Map<string, ListedCase[]>();
     for (const line of res.stdout.split('\n')) {
       const text = line.trim();
@@ -802,6 +807,9 @@ async function discoverInto(controller: vscode.TestController): Promise<void> {
         // ignore
       }
     }
+    outputChannel.appendLine(
+      `test discovery: ${byFile.size} file(s) from ${folder.uri.fsPath}`,
+    );
     for (const [file, cases] of byFile) {
       const uri = vscode.Uri.file(file);
       const fileItem = controller.createTestItem('file:' + file, path.basename(file), uri);
@@ -872,9 +880,11 @@ async function runTestRequest(
       }
     }
     try {
-      const args = ['test', uri.fsPath, ...extra];
+      // Go's flag parser stops at the first non-flag argument, so every
+      // command-line flag must precede the test file path.
+      const args = ['test', ...extra, '--format=json'];
       if (caseName) args.push('--case', caseName);
-      args.push('--format=json');
+      args.push(uri.fsPath);
       const res = await execFileP(exe, args, cwd);
       const results = parseCaseResults(res.stdout);
       if (results.length === 0) {
