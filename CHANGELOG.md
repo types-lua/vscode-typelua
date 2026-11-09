@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+- Fix **Restart Language Server** throwing `command 'typelua.runFile' already
+  exists`: restart no longer re-registers commands, debuggers, the Test
+  Explorer and file watchers (they are registered once by `activate`). This
+  previously aborted the restart before the language client was recreated.
+- Debugging note: the extension resolves `tlua` from `typelua.server.path`,
+  then a bundled server, then `PATH`; the same binary serves LSP and DAP.
+
 ## 0.2.0
 
 - Build: the extension (including `vscode-languageclient`) is bundled by

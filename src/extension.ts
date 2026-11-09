@@ -179,15 +179,13 @@ async function openServerSettings(): Promise<void> {
 }
 
 async function restartFlow(context: vscode.ExtensionContext): Promise<void> {
-  // Manual retry: a fresh attempt may notify again.
+  // Manual retry: a fresh attempt may notify again. Commands, debuggers,
+  // test controller and file watchers were registered once by activate();
+  // registering them again throws "command ... already exists" and aborts
+  // the restart before the language client is recreated.
   lastClosePopupAt = 0;
   await stopClient();
   extContext = context;
-  registerCommands(context);
-  registerDebugging(context);
-  registerTestDebugTracker(context);
-  setupTesting(context);
-
   await startClient(context);
 }
 

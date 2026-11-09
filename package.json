@@ -2,7 +2,7 @@
   "name": "typelua",
   "displayName": "TypeLua",
   "description": "TypeLua language support: syntax, snippets, LSP features (diagnostics, hover, completion, navigation, rename), Test Explorer with run/debug, and breakpoint debugging.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "typelua",
   "license": "MIT",
   "repository": {
