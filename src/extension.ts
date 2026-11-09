@@ -32,6 +32,7 @@ let startTimer: ReturnType<typeof setTimeout> | undefined;
 let attemptDisposables: vscode.Disposable[] = [];
 let shutdownNotified = false;
 let lastClosePopupAt = 0;
+let warnedLuaPath = '';
 const CLOSE_POPUP_MIN_INTERVAL_MS = 30_000;
 
 const BTN_SHOW_OUTPUT = 'Show Output';
@@ -662,7 +663,29 @@ function registerDebugging(context: vscode.ExtensionContext): void {
         }
         if (!config.lua) {
           const lua = vscode.workspace.getConfiguration('typelua').get<string>('lua.path') ?? '';
-          if (lua) config.lua = lua;
+          if (lua) {
+            const server = resolveServer(context);
+            const isCompiler =
+              path.basename(lua).toLowerCase() === 'tlua' ||
+              path.resolve(lua) === path.resolve(server.command);
+            if (isCompiler) {
+              // Configuring tlua as the interpreter makes the adapter run
+              // `tlua dap_agent.lua`, which prints the compiler usage and
+              // never starts the debuggee. Fall back to auto-detection.
+              outputChannel.appendLine(
+                `ignoring typelua.lua.path="${lua}": expected lua5.4 or luajit, not the tlua compiler`,
+              );
+              if (warnedLuaPath !== lua) {
+                warnedLuaPath = lua;
+                void vscode.window.showWarningMessage(
+                  'TypeLua: "typelua.lua.path" points at the tlua compiler. ' +
+                    'Set it to lua5.4 or luajit; using auto-detection for this session.',
+                );
+              }
+            } else {
+              config.lua = lua;
+            }
+          }
         }
         if (!config.cwd && folder) config.cwd = folder.uri.fsPath;
         return config;

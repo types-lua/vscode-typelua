@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Ignore a `typelua.lua.path` that points at the `tlua` compiler (the path is
+  for the Lua interpreter, not the language server). The adapter now falls
+  back to auto-detection and warns once, instead of launching
+  `tlua dap_agent.lua` and printing compiler usage.
+
 ## 0.2.1
 
 - Fix **Restart Language Server** throwing `command 'typelua.runFile' already
